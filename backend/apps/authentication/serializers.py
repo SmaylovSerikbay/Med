@@ -34,8 +34,37 @@ class OTPVerifySerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     """User serializer"""
+    has_password = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ['id', 'phone_number', 'phone_verified', 'date_joined']
-        read_only_fields = ['id', 'phone_verified', 'date_joined']
+        fields = ['id', 'phone_number', 'phone_verified', 'date_joined', 'has_password']
+        read_only_fields = ['id', 'phone_verified', 'date_joined', 'has_password']
+    
+    def get_has_password(self, obj):
+        return obj.has_usable_password()
+
+
+class PasswordLoginSerializer(serializers.Serializer):
+    """Serializer for password login"""
+    phone_number = serializers.CharField(max_length=20)
+    password = serializers.CharField(write_only=True)
+
+
+class SetPasswordSerializer(serializers.Serializer):
+    """Serializer for setting password"""
+    current_password = serializers.CharField(write_only=True, required=False)
+    new_password = serializers.CharField(write_only=True, min_length=6)
+
+
+class ResetPasswordRequestSerializer(serializers.Serializer):
+    """Serializer for password reset request"""
+    phone_number = serializers.CharField(max_length=20)
+
+
+class ResetPasswordConfirmSerializer(serializers.Serializer):
+    """Serializer for password reset confirmation"""
+    phone_number = serializers.CharField(max_length=20)
+    code = serializers.CharField(max_length=10)
+    new_password = serializers.CharField(write_only=True, min_length=6)
 
