@@ -48,11 +48,26 @@ api.interceptors.response.use(
 
 // API методы
 export const authAPI = {
+  // WhatsApp OTP
   sendOTP: (phoneNumber: string) =>
     api.post('/auth/send-otp/', { phone_number: phoneNumber }),
   
   verifyOTP: (phoneNumber: string, code: string) =>
     api.post('/auth/verify-otp/', { phone_number: phoneNumber, code }),
+  
+  // Password authentication
+  loginPassword: (phoneNumber: string, password: string) =>
+    api.post('/auth/login-password/', { phone_number: phoneNumber, password }),
+  
+  setPassword: (newPassword: string, currentPassword?: string) =>
+    api.post('/auth/set-password/', { new_password: newPassword, current_password: currentPassword }),
+  
+  // Password reset
+  resetPasswordRequest: (phoneNumber: string) =>
+    api.post('/auth/reset-password/request/', { phone_number: phoneNumber }),
+  
+  resetPasswordConfirm: (phoneNumber: string, code: string, newPassword: string) =>
+    api.post('/auth/reset-password/confirm/', { phone_number: phoneNumber, code, new_password: newPassword }),
   
   getProfile: () => api.get('/auth/profile/'),
 }

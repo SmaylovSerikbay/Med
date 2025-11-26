@@ -3,7 +3,8 @@
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore, useIsAuthenticated } from '@/store/authStore'
 import { useUserStore } from '@/store/userStore'
-import { Shield, LogOut, Menu, X } from 'lucide-react'
+import { formatPhoneNumber } from '@/lib/phoneUtils'
+import { Shield, LogOut, Menu, X, Settings } from 'lucide-react'
 import { useState } from 'react'
 
 export function Header() {
@@ -114,11 +115,21 @@ export function Header() {
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100/80 rounded-xl">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-gray-700">{user?.phone_number}</span>
+              <span className="text-sm font-medium text-gray-700">
+                {formatPhoneNumber(user?.phone_number || '')}
+              </span>
             </div>
+            <button
+              onClick={() => router.push('/dashboard/settings')}
+              className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all duration-200"
+              title="Настройки"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
             <button
               onClick={handleLogout}
               className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+              title="Выйти"
             >
               <LogOut className="w-5 h-5" />
             </button>

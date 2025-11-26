@@ -18,6 +18,7 @@ interface UserProfile {
     first_name?: string
     last_name?: string
     middle_name?: string
+    has_password?: boolean
   }
   roles: string[]
   primary_role: 'employer' | 'clinic' | 'patient'

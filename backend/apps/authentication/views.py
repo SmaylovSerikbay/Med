@@ -107,6 +107,190 @@ def verify_otp(request):
     })
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_password(request):
+    """Вход по номеру телефона и паролю"""
+    phone_number = request.data.get('phone_number', '').strip()
+    password = request.data.get('password', '')
+    
+    if not phone_number or not password:
+        return Response(
+            {'error': 'Номер телефона и пароль обязательны'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    normalized_phone = normalize_phone_number(phone_number)
+    
+    try:
+        user = User.objects.get(phone_number=normalized_phone)
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'Неверный номер телефона или пароль'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
+    # Проверяем пароль
+    if not user.check_password(password):
+        return Response(
+            {'error': 'Неверный номер телефона или пароль'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
+    # Генерируем токены
+    from rest_framework_simplejwt.tokens import RefreshToken
+    refresh = RefreshToken.for_user(user)
+    
+    return Response({
+        'user': {
+            'id': user.id,
+            'phone_number': user.phone_number,
+            'phone_verified': user.phone_verified,
+            'date_joined': user.date_joined.isoformat() if user.date_joined else None,
+        },
+        'tokens': {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+        }
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_password(request):
+    """Установить или изменить пароль"""
+    new_password = request.data.get('new_password', '')
+    current_password = request.data.get('current_password', '')
+    
+    if not new_password:
+        return Response(
+            {'error': 'Новый пароль обязателен'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if len(new_password) < 6:
+        return Response(
+            {'error': 'Пароль должен содержать минимум 6 символов'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    user = request.user
+    
+    # Если у пользователя уже есть пароль, требуем текущий пароль
+    if user.has_usable_password():
+        if not current_password:
+            return Response(
+                {'error': 'Текущий пароль обязателен'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not user.check_password(current_password):
+            return Response(
+                {'error': 'Неверный текущий пароль'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+    
+    # Устанавливаем новый пароль
+    user.set_password(new_password)
+    user.save()
+    
+    return Response({
+        'message': 'Пароль успешно установлен',
+        'has_password': True
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password_request(request):
+    """Запрос на сброс пароля через WhatsApp OTP"""
+    phone_number = request.data.get('phone_number', '').strip()
+    
+    if not phone_number:
+        return Response(
+            {'error': 'Номер телефона обязателен'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    normalized_phone = normalize_phone_number(phone_number)
+    
+    # Проверяем существование пользователя
+    try:
+        user = User.objects.get(phone_number=normalized_phone)
+    except User.DoesNotExist:
+        # Не раскрываем информацию о существовании пользователя
+        return Response({
+            'message': 'Если пользователь существует, код отправлен на WhatsApp',
+            'phone_number': normalized_phone
+        })
+    
+    # Генерируем и сохраняем OTP
+    otp_code = OTPService.create_otp(normalized_phone)
+    
+    # Отправляем через Green-API
+    message = f"Код для сброса пароля ProfMed.kz: {otp_code.code}\nКод действителен {settings.OTP_EXPIRY_MINUTES} минут."
+    
+    try:
+        GreenAPIService.send_whatsapp_message(normalized_phone, message)
+        return Response({
+            'message': 'Код для сброса пароля отправлен на WhatsApp',
+            'phone_number': normalized_phone
+        })
+    except Exception as e:
+        return Response(
+            {'error': f'Ошибка отправки сообщения: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password_confirm(request):
+    """Подтверждение сброса пароля с OTP кодом"""
+    phone_number = request.data.get('phone_number', '').strip()
+    code = request.data.get('code', '').strip()
+    new_password = request.data.get('new_password', '')
+    
+    if not phone_number or not code or not new_password:
+        return Response(
+            {'error': 'Номер телефона, код и новый пароль обязательны'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if len(new_password) < 6:
+        return Response(
+            {'error': 'Пароль должен содержать минимум 6 символов'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    normalized_phone = normalize_phone_number(phone_number)
+    
+    # Проверяем OTP
+    is_valid, otp_obj = OTPService.validate_otp(normalized_phone, code)
+    
+    if not is_valid:
+        return Response(
+            {'error': 'Неверный или истекший код'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Получаем пользователя
+    try:
+        user = User.objects.get(phone_number=normalized_phone)
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'Пользователь не найден'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Устанавливаем новый пароль
+    user.set_password(new_password)
+    user.save()
+    
+    return Response({
+        'message': 'Пароль успешно изменен'
+    })
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def profile(request):
@@ -197,6 +381,7 @@ def profile(request):
             'first_name': getattr(user, 'first_name', '') or '',
             'last_name': getattr(user, 'last_name', '') or '',
             'middle_name': getattr(user, 'middle_name', '') or '',
+            'has_password': user.has_usable_password(),
         },
         'roles': roles,
         'primary_role': primary_role,
